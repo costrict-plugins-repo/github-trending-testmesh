@@ -1,0 +1,22 @@
+flow:
+  name: "Order Service — Zero Quantity Returns 400"
+  description: "POST /orders with quantity=0 fails binding validation (gt=0)"
+
+  env_file: ../../.env.test
+
+  steps:
+    - id: zero_quantity
+      action: http_request
+      config:
+        method: POST
+        url: "${ORDER_SERVICE_URL}/api/v1/orders"
+        headers:
+          Content-Type: application/json
+        body:
+          user_id: "00000000-0000-0000-0000-000000000001"
+          items:
+            - product_id: "00000000-0000-0000-0000-000000000001"
+              quantity: 0
+      assert:
+        - "status == 400"
+        - "body.error != nil"

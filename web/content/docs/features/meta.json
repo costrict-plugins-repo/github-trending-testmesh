@@ -1,0 +1,25 @@
+{
+  "title": "Features",
+  "pages": [
+    "environments",
+    "mock-server",
+    "async-patterns",
+    "contract-testing",
+    "data-generation",
+    "ai-integration",
+    "mcp-integration",
+    "workspace-integrations",
+    "embeddings",
+    "observability",
+    "telemetry",
+    "scheduling",
+    "suites",
+    "test-environments",
+    "reporting",
+    "load-testing",
+    "debugging",
+    "git-integration",
+    "import-export",
+    "plugins"
+  ]
+}

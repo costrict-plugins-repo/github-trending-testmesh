@@ -1,0 +1,19 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "why-testmesh",
+    "dashboard",
+    "getting-started",
+    "yaml-reference",
+    "cli",
+    "features",
+    "deployment",
+    "architecture",
+    "guides",
+    "cheat-sheet",
+    "comparison",
+    "changelog",
+    "contributing"
+  ]
+}

@@ -1,0 +1,207 @@
+flow:
+  name: "E2E — Recommendations After Purchase (gRPC)"
+  description: >
+    Create user, create 2 products, place orders for both, wait for recommendation-service
+    to write Neo4j PURCHASED edges (via Kafka consumer), then call gRPC GetRecommendations
+    and verify product_ids are returned.
+
+  env_file: ../../.env.test
+
+  setup:
+    - id: cleanup_order_items
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: >
+          DELETE FROM order_service.order_items
+          WHERE order_id IN (
+            SELECT id FROM order_service.orders
+            WHERE user_id IN (SELECT id::text FROM user_service.users WHERE email = 'gen-reco-purchase@example.com')
+          )
+
+    - id: cleanup_orders
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: >
+          DELETE FROM order_service.orders
+          WHERE user_id IN (SELECT id::text FROM user_service.users WHERE email = 'gen-reco-purchase@example.com')
+
+    - id: cleanup_products
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM product_service.products WHERE name IN ('Reco Product A', 'Reco Product B')"
+
+    - id: cleanup_user
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM user_service.users WHERE email = 'gen-reco-purchase@example.com'"
+
+  steps:
+    - id: create_user
+      action: http_request
+      config:
+        method: POST
+        url: "${USER_SERVICE_URL}/api/v1/users"
+        headers:
+          Content-Type: application/json
+        body:
+          name: "Gen Reco Purchase User"
+          email: "gen-reco-purchase@example.com"
+      assert:
+        - "status == 201"
+        - "body.id != nil"
+      output:
+        user_id: "$.body.id"
+
+    - id: create_product_a
+      action: http_request
+      config:
+        method: POST
+        url: "${PRODUCT_SERVICE_URL}/api/v1/products"
+        headers:
+          Content-Type: application/json
+        body:
+          name: "Reco Product A"
+          description: "Product A for recommendation test"
+          price: 25.00
+          inventory: 50
+      assert:
+        - "status == 201"
+        - "body.id != nil"
+      output:
+        product_a_id: "$.body.id"
+
+    - id: create_product_b
+      action: http_request
+      config:
+        method: POST
+        url: "${PRODUCT_SERVICE_URL}/api/v1/products"
+        headers:
+          Content-Type: application/json
+        body:
+          name: "Reco Product B"
+          description: "Product B for recommendation test"
+          price: 40.00
+          inventory: 30
+      assert:
+        - "status == 201"
+        - "body.id != nil"
+      output:
+        product_b_id: "$.body.id"
+
+    - id: place_order_a
+      action: http_request
+      config:
+        method: POST
+        url: "${ORDER_SERVICE_URL}/api/v1/orders"
+        headers:
+          Content-Type: application/json
+        body:
+          user_id: "{{user_id}}"
+          items:
+            - product_id: "{{product_a_id}}"
+              quantity: 1
+      assert:
+        - "status == 201"
+        - "body.id != nil"
+      output:
+        order_a_id: "$.body.id"
+
+    - id: place_order_b
+      action: http_request
+      config:
+        method: POST
+        url: "${ORDER_SERVICE_URL}/api/v1/orders"
+        headers:
+          Content-Type: application/json
+        body:
+          user_id: "{{user_id}}"
+          items:
+            - product_id: "{{product_b_id}}"
+              quantity: 1
+      assert:
+        - "status == 201"
+        - "body.id != nil"
+      output:
+        order_b_id: "$.body.id"
+
+    # Wait for both order.placed events to be available in Kafka.
+    # This confirms recommendation-service's Kafka consumer has had events to process.
+    # TestMesh has no native sleep/delay action; polling Kafka for the events is the
+    # most reliable proxy for Neo4j PURCHASED edges having been written.
+    # Gap: direct Neo4j cleanup in teardown is not possible without a neo4j.query action.
+    - id: wait_for_order_events
+      action: kafka_consumer
+      config:
+        brokers: "${KAFKA_BROKERS}"
+        topic: order.placed
+        group_id: "testmesh-plan-reco-purchase-{{RANDOM_ID}}"
+        auto_offset_reset: "earliest"
+        from_beginning: true
+        timeout: "15s"
+        count: 2
+      assert:
+        - "len(messages) >= 2"
+
+    # Poll notification DB as proxy for Kafka consumer processing lag.
+    # notification-service and recommendation-service both consume order.placed.
+    # Once 2 notifications appear, all consumers have had time to write their state.
+    - id: wait_for_notifications
+      action: db_poll
+      config:
+        connection: "${DB_URL}"
+        query: >
+          SELECT id FROM notification_service.notifications
+          WHERE user_id = $1
+        params: ["{{user_id}}"]
+        poll_interval: "1s"
+        timeout: "15s"
+        expected_rows: 2
+      assert:
+        - "row_count >= 2"
+
+    - id: get_recommendations
+      action: grpc
+      config:
+        address: "${RECOMMENDATION_GRPC_HOST}"
+        service: recommendation.RecommendationService
+        method: GetRecommendations
+        use_reflection: true
+        request:
+          user_id: "{{user_id}}"
+          limit: 10
+      assert:
+        - "body.product_ids != nil"
+        - "len(body.product_ids) > 0"
+
+  teardown:
+    - id: cleanup_order_items
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: >
+          DELETE FROM order_service.order_items
+          WHERE order_id IN ('{{order_a_id}}', '{{order_b_id}}')
+
+    - id: cleanup_orders
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: >
+          DELETE FROM order_service.orders
+          WHERE id IN ('{{order_a_id}}', '{{order_b_id}}')
+
+    - id: cleanup_products
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM product_service.products WHERE name IN ('Reco Product A', 'Reco Product B')"
+
+    - id: cleanup_user
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM user_service.users WHERE email = 'gen-reco-purchase@example.com'"

@@ -1,0 +1,50 @@
+flow:
+  name: "Order Service — Nonexistent Product Returns 400"
+  description: "POST /orders with product_id that doesn't exist — product-service returns 404, order-service returns 400"
+
+  env_file: ../../.env.test
+
+  setup:
+    - id: cleanup_user
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM user_service.users WHERE email = 'plan-no-product@example.com'"
+    - id: create_user
+      action: http_request
+      config:
+        method: POST
+        url: "${USER_SERVICE_URL}/api/v1/users"
+        headers:
+          Content-Type: application/json
+        body:
+          email: "plan-no-product@example.com"
+          name: "Plan No Product User"
+      assert:
+        - "status == 201"
+      output:
+        user_id: "$.body.id"
+
+  steps:
+    - id: nonexistent_product
+      action: http_request
+      config:
+        method: POST
+        url: "${ORDER_SERVICE_URL}/api/v1/orders"
+        headers:
+          Content-Type: application/json
+        body:
+          user_id: "{{user_id}}"
+          items:
+            - product_id: "00000000-0000-0000-0000-000000000000"
+              quantity: 1
+      assert:
+        - "status == 400"
+        - "body.error != nil"
+
+  teardown:
+    - id: cleanup_user
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM user_service.users WHERE email = 'plan-no-product@example.com'"

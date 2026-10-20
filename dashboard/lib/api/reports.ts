@@ -1,0 +1,108 @@
+import { apiClient } from './client';
+import type {
+  Report,
+  GenerateReportRequest,
+  ListReportsResponse,
+  GetMetricsResponse,
+  GetFlakinessResponse,
+  GetFlakinessHistoryResponse,
+  GetTrendsResponse,
+  GetStepPerformanceResponse,
+  ReportFormat,
+  ReportStatus,
+} from './types';
+
+// Reports API (workspace-scoped — apiClient interceptor rewrites /api/v1/reports → /api/v1/workspaces/{id}/reports)
+export const reportsApi = {
+  generate: async (data: GenerateReportRequest): Promise<Report> => {
+    const response = await apiClient.post<Report>('/api/v1/reports/generate', data);
+    return response.data;
+  },
+
+  list: async (params?: {
+    format?: ReportFormat;
+    status?: ReportStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListReportsResponse> => {
+    const response = await apiClient.get<ListReportsResponse>('/api/v1/reports', { params });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<Report> => {
+    const response = await apiClient.get<Report>(`/api/v1/reports/${id}`);
+    return response.data;
+  },
+
+  download: async (id: string): Promise<{ type: 'redirect'; url: string } | { type: 'blob'; blob: Blob }> => {
+    const response = await apiClient.get(`/api/v1/reports/${id}/download`, {
+      responseType: 'arraybuffer',
+    });
+    const contentType = response.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+      const text = new TextDecoder().decode(response.data as ArrayBuffer);
+      const json = JSON.parse(text) as { url: string };
+      return { type: 'redirect', url: json.url };
+    }
+    const blob = new Blob([response.data as ArrayBuffer], { type: contentType });
+    return { type: 'blob', blob };
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/reports/${id}`);
+  },
+};
+
+// Analytics API (platform-wide aggregated data — not workspace-scoped)
+export const analyticsApi = {
+  getMetrics: async (params?: {
+    start_date?: string;
+    end_date?: string;
+    environment?: string;
+  }): Promise<GetMetricsResponse> => {
+    const response = await apiClient.get<GetMetricsResponse>('/api/v1/analytics/metrics', { params });
+    return response.data;
+  },
+
+  getFlakiness: async (params?: {
+    flow_id?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GetFlakinessResponse | GetFlakinessHistoryResponse> => {
+    const response = await apiClient.get('/api/v1/analytics/flakiness', { params });
+    return response.data;
+  },
+
+  getTrends: async (params?: {
+    start_date?: string;
+    end_date?: string;
+    environment?: string;
+    group_by?: 'day' | 'week' | 'month';
+  }): Promise<GetTrendsResponse> => {
+    const response = await apiClient.get<GetTrendsResponse>('/api/v1/analytics/trends', { params });
+    return response.data;
+  },
+
+  getStepPerformance: async (params?: {
+    flow_id?: string;
+    action?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<GetStepPerformanceResponse> => {
+    const response = await apiClient.get<GetStepPerformanceResponse>('/api/v1/analytics/steps', { params });
+    return response.data;
+  },
+
+  triggerAggregation: async (data?: {
+    start_date?: string;
+    end_date?: string;
+  }): Promise<{ message: string; start_date: string; end_date: string }> => {
+    const response = await apiClient.post('/api/v1/analytics/aggregate', data || {});
+    return response.data;
+  },
+};
+
+export default {
+  reports: reportsApi,
+  analytics: analyticsApi,
+};

@@ -1,0 +1,161 @@
+---
+title: Changelog
+description: Release history and notable changes for TestMesh.
+---
+
+
+# Changelog
+
+<Callout type="info">
+  TestMesh follows semantic versioning. CLI, API, and YAML flow format changes are noted separately.
+</Callout>
+
+---
+
+## v0.1.0 — 2026-03-30
+
+### New: Observability, Storage & Graph Native Plugins
+
+Five new built-in integrations shipping with the OSS engine:
+
+**Neo4j** — query and assert on graph data using Cypher
+- `neo4j.query`, `neo4j.assert`
+
+**MinIO / S3** — object storage operations in flows
+- `minio.put`, `minio.get`, `minio.delete`, `minio.assert`
+
+**OTel / Tempo** — trace context propagation and span assertion
+- `otel.inject`, `otel.assert`
+
+**Grafana Loki** — log query and assertion with LogQL
+- `loki.query`, `loki.assert`
+
+**Prometheus** — PromQL queries and metric counter assertions
+- `prometheus.query`, `prometheus.assert`
+
+### New: LGTM Local Stack
+
+`./infra.sh up` now starts the full LGTM observability stack alongside existing infrastructure: OTel Collector, Grafana Tempo, Grafana Loki, Prometheus, and Grafana (with all three datasources pre-configured).
+
+### Demo Services
+
+All four demo services (user, product, order, notification) now emit:
+- Structured JSON logs via zap, exported to Loki via OTLP
+- Prometheus metrics (`http_requests_total`, `http_request_duration_seconds`, `http_requests_in_flight`) on `GET /metrics`
+- Traces to OTel Collector (previously went directly to the TestMesh API)
+
+---
+
+## v0.1.11 — 2026-04-15
+
+**GitHub PR Write-Back**
+- Analysis results posted directly to pull requests as comments with severity-tagged findings
+- Commit status checks (`pending` → `success` / `failure`) set automatically on PR events
+- Auto-fix PRs: self-healing suggestions above a confidence threshold create fix PRs automatically
+- PR write-back configuration per integration (`comment_on_pr`, `set_commit_status`, `auto_pr_enabled`, `auto_pr_threshold`)
+
+**Workspace-Scoped Integrations**
+- Integrations (AI, Git, Notification) can now be configured per workspace, overriding global defaults
+- Per-agent LLM provider routing: assign different AI providers to different agents within a workspace
+- New `WorkspaceAIConfig` model with default provider and agent-level overrides
+- Provider resolution chain: agent override → workspace default → global default → env var
+
+**Semantic Search & Embeddings**
+- Vector embeddings for graph nodes, flows, and code changes using OpenAI `text-embedding-3-small`
+- pgvector-backed storage with HNSW indexing for fast similarity search
+- Async embedding pipeline with 10-worker pool and bounded queue
+- Coverage, impact, diagnosis agents and diff analyzer enhanced with semantic search
+- New search API endpoints for nodes, flows, and code
+
+**System Graph CLI**
+- `testmesh graph scan` — scan local directories or remote Git repos; discovers services, APIs, DB tables, queues, and their relationships
+- `testmesh graph status` — show node/edge/coverage/conflict statistics
+- `testmesh graph services` — list discovered services
+- `testmesh graph show <node-id>` — inspect a node and its dependencies
+- `testmesh graph coverage` — coverage percentage with uncovered node list
+- `testmesh graph search <query>` — search across all graph nodes
+- `testmesh graph conflicts` — list and review merge conflicts
+- `testmesh graph export --format json|dot|mermaid` — export for visualization
+
+**Claude Code Plugin**
+- Install via Claude Code: `/plugin marketplace add test-mesh/testmesh` then `/plugin install testmesh@testmesh`
+- Includes 8 skills: `generate-flow`, `run-flow`, `validate-flow`, `action-patterns`, `debugging-flows`, `flow-layers`, `mcp-tools`, `yaml-schema`
+
+**Installation**
+- Windows installer: `irm https://testmesh.io/install.ps1 | iex`
+- npm package: `npm install -g @testmesh/cli` (was incorrectly documented as `testmesh`)
+
+**Also in this release**
+- `mcp_call` action — call external MCP servers as steps in a flow, enabling AI tool use within tests
+- `testmesh chat` — conversational flow creation; describe what you want to test in plain English
+- Plugin system for custom action handlers — bring your own protocol or internal tool
+- Advanced reporting: JUnit XML output, HTML reports, and Slack notifications on failure
+
+---
+
+## v0.4.0 — 2025-12-01
+
+**CLI**
+- `testmesh generate --spec openapi.yaml` — AI-powered flow generation from an OpenAPI spec
+- `testmesh watch` — TDD mode; re-runs flows automatically when YAML files change
+
+**Actions**
+- `websocket` action type added — connect, send messages, and assert on received frames
+- Mock server gains recording and playback mode — record real traffic and replay it in tests
+
+**Infrastructure**
+- Kafka SASL/TLS authentication support — connect to Confluent Cloud, MSK, and other secured clusters
+- Dashboard: execution timeline view with per-step timing
+
+---
+
+## v0.3.0 — 2025-09-15
+
+**Actions**
+- `mock_server_start` / `mock_server_stop` / `mock_server_verify` — spin up an in-process HTTP mock server as part of your flow setup
+- `grpc_call` action type — call gRPC services with proto reflection or inline message definitions
+- `redis_get` / `redis_set` action types — read and write Redis keys as flow steps
+
+**CLI**
+- `testmesh debug` — interactive step-by-step mode; inspect request, response, and extracted variables at each step
+
+**Testing**
+- Contract testing assertions — assert that a response matches a JSON Schema or OpenAPI response definition
+
+---
+
+## v0.2.0 — 2025-06-01
+
+**Actions**
+- `database_query` action — run SQL queries against PostgreSQL and assert on results
+- `kafka_producer` action — publish messages to Kafka topics
+- `kafka_consumer` action — consume and assert on messages from Kafka topics; supports `from_beginning` and `timeout`
+
+**Flows**
+- Variable extraction with JSONPath — `output:` block with `$.body.field` syntax
+- Retry configuration per step — `max_attempts`, `delay`, `backoff: exponential | linear | constant`
+
+**CLI**
+- `testmesh validate` — validate a flow YAML file without executing it
+
+---
+
+## v0.1.0 — 2025-03-01
+
+Initial release.
+
+**Actions**
+- `http_request` — HTTP/HTTPS requests with method, headers, body, and timeout
+
+**Flows**
+- YAML flow format with `flow:` wrapper at root
+- `assert:` block with expression-based assertions (`status == 200`, `body.id != ""`)
+- `env:` block for flow-level environment variables
+
+**CLI**
+- `testmesh run` — execute a flow from a YAML file
+- Exit codes: `0` (all passed), `1` (flow error), `2` (assertion failure)
+
+**Deployment**
+- Docker Compose configuration for local development
+- API server on port 5016, Next.js dashboard on port 3000

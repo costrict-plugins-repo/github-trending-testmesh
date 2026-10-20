@@ -1,0 +1,245 @@
+---
+title: mock_server_*
+description: Start, stop, and configure mock HTTP servers inside a flow — including stateful mocks and conditional responses.
+---
+
+Mock server actions let you spin up a fully configurable HTTP server inside a flow. Use mocks to isolate your service under test from external dependencies, simulate error conditions, and verify that your service hits the right endpoints.
+
+## Actions overview
+
+| Action | Description |
+|---|---|
+| `mock_server_start` | Start a mock HTTP server and register endpoints |
+| `mock_server_stop` | Stop a running mock server |
+| `mock_server_update` | Add or replace an endpoint on a running mock server |
+
+---
+
+## mock_server_start
+
+Starts an HTTP mock server and registers endpoints on it. The server is accessible via the `base_url` output variable — pass this URL into subsequent HTTP steps instead of a real service URL.
+
+### Minimal example
+
+```yaml
+- id: start_mock
+  action: mock_server_start
+  config:
+    name: "user-service-mock"
+    endpoints:
+      - path: /api/users/:id
+        method: GET
+        response:
+          status_code: 200
+          body:
+            id: "123"
+            name: "Test User"
+  output:
+    mock_url: "$.base_url"
+    mock_id: "$.server_id"
+```
+
+### Config fields
+
+| Field | Required | Description |
+|---|---|---|
+| `name` | yes | Server name — used by `mock_server_stop` and `mock_server_update` to reference the server |
+| `endpoints` | yes | Array of endpoint definitions |
+| `server_id` | no | Explicit UUID to assign to this server (auto-generated if omitted) |
+
+### Output fields
+
+| Field | Description |
+|---|---|
+| `base_url` | URL where the mock server is reachable (e.g. `http://localhost:5016/mock/{id}`) |
+| `server_id` | UUID of the started server |
+| `name` | Server name |
+| `status` | Always `"running"` on success |
+
+### Endpoint definition
+
+Each endpoint defines the path, method, optional request matching, and the response to return.
+
+```yaml
+endpoints:
+  - path: /api/users/:id
+    method: GET
+    priority: 0               # Lower value = matched first (default: 0)
+
+    # Request matching (optional — if omitted, all requests to this path/method match)
+    match:
+      path_pattern: "^/api/users/[0-9]+"  # Regex on the full path
+      headers:                             # Header must equal
+        Authorization: "Bearer token"
+      query_params:                        # Query parameter must equal
+        status: "active"
+      body_pattern: ".*admin.*"            # Regex on raw body string
+      body_json:                           # Exact JSON sub-match
+        type: "admin"
+
+    # Response
+    response:
+      status_code: 200
+      headers:
+        Content-Type: "application/json"
+      body:
+        id: "123"
+        name: "Test User"
+      body_json:              # Alternative to body — same effect
+        id: "123"
+      body_text: "plain text" # Alternative for non-JSON responses
+      delay_ms: 100           # Simulate latency in milliseconds
+```
+
+### Output
+
+```yaml
+output:
+  mock_url: "$.base_url"
+  mock_server_id: "$.server_id"
+```
+
+---
+
+## mock_server_stop
+
+Stops a running mock server by name or ID.
+
+```yaml
+- id: stop_mock
+  action: mock_server_stop
+  config:
+    server_id: "${start_mock.mock_server_id}"
+```
+
+| Field | Description |
+|---|---|
+| `server_id` | UUID of the server to stop |
+
+---
+
+## mock_server_update
+
+Adds or replaces an endpoint on a running mock server at runtime. Useful for simulating state changes mid-flow (e.g., first call returns 200, second returns 404).
+
+```yaml
+- id: update_mock_to_return_error
+  action: mock_server_update
+  config:
+    server_id: "${start_mock.mock_server_id}"
+    endpoints:
+      - path: /api/charge
+        method: POST
+        response:
+          status_code: 503
+          body:
+            error: "Service unavailable"
+```
+
+---
+
+## Stateful mock
+
+Stateful mocks maintain server-side state across requests using a `state` config block per endpoint. The state is initialized on the first request and updated by `update_rule`.
+
+```yaml
+- id: start_stateful_mock
+  action: mock_server_start
+  config:
+    name: "counter-mock"
+    endpoints:
+      - path: /api/counter
+        method: POST
+        state:
+          state_key: "count"
+          initial_value: 0
+          update_rule: "increment"
+        response:
+          status_code: 200
+          body:
+            count: 0
+```
+
+| State field | Description |
+|---|---|
+| `state_key` | Key name for this endpoint's state slot |
+| `initial_value` | Value on first request |
+| `update_rule` | How to update the value: `set`, `increment`, or `append` |
+| `update_value` | Value to use with `set` or `append` |
+
+---
+
+## Complete flow example
+
+```yaml title="mock-payment-flow.yaml"
+flow:
+  name: "Payment Service with Mock Gateway"
+
+  setup:
+    - id: start_payment_mock
+      action: mock_server_start
+      config:
+        name: "payment-gateway"
+        endpoints:
+          - path: /v1/payment-intents
+            method: POST
+            response:
+              status_code: 201
+              body:
+                id: "pi_test_123"
+                status: "requires_confirmation"
+
+          - path: /v1/payment-intents/:id/confirm
+            method: POST
+            response:
+              status_code: 200
+              body:
+                id: "pi_test_123"
+                status: "succeeded"
+      output:
+        payment_mock_url: "$.base_url"
+
+  steps:
+    - id: create_order
+      action: http_request
+      config:
+        method: POST
+        url: "${API_URL}/orders"
+        body:
+          items: ["item_1", "item_2"]
+          payment_gateway_url: "${start_payment_mock.payment_mock_url}"
+      output:
+        order_id: "$.body.id"
+      assert:
+        - status == 201
+        - body.payment_status == "succeeded"
+
+    - id: switch_gateway_to_error
+      action: mock_server_update
+      config:
+        server_id: "${start_payment_mock.mock_server_id}"
+        endpoints:
+          - path: /v1/payment-intents
+            method: POST
+            response:
+              status_code: 402
+              body:
+                error: "Card declined"
+
+    - id: create_order_should_fail
+      action: http_request
+      config:
+        method: POST
+        url: "${API_URL}/orders"
+        body:
+          items: ["item_1"]
+          payment_gateway_url: "${start_payment_mock.payment_mock_url}"
+      assert:
+        - status == 402
+
+  teardown:
+    - id: stop_payment_mock
+      action: mock_server_stop
+      config:
+        server_id: "${start_payment_mock.mock_server_id}"
+```

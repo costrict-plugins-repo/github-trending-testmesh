@@ -1,0 +1,237 @@
+---
+title: Installation
+description: Install the TestMesh CLI and set up your environment.
+---
+
+<Callout type="info">
+**Not sure which option to choose?** Use **Option A (Docker)** if you want to evaluate TestMesh quickly. Use **Option B (from source)** if you're contributing to the project or need the latest changes.
+</Callout>
+
+The TestMesh CLI runs flows locally without needing the full API server. It connects directly to your services and infrastructure.
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Go | 1.23+ | Required only for `go install` or building from source |
+| Docker | Any recent version | Required for local infrastructure |
+| Anthropic or OpenAI API key | — | Required only for AI features (`generate`, `chat`) |
+
+## Local Infrastructure
+
+The full local dev stack is started with `./infra.sh up` from the repository root. This starts PostgreSQL, Redis, Kafka, Neo4j, and MinIO — plus the complete LGTM observability stack:
+
+| Service | Port(s) | URL |
+|---|---|---|
+| PostgreSQL | 5432 | — |
+| Redis | 6379 | — |
+| Kafka | 9092 | — |
+| Neo4j | 7474 / 7687 | http://localhost:7474 |
+| MinIO | 9000 / 9001 | http://localhost:9001 |
+| OTel Collector | 4317 / 4318 | — |
+| Grafana Tempo | 3200 | — |
+| Grafana Loki | 3100 | — |
+| Prometheus | 9090 | http://localhost:9090 |
+| Grafana | 3002 | http://localhost:3002 |
+
+Grafana comes pre-configured with Tempo, Loki, and Prometheus as datasources.
+
+## Install the CLI
+
+<Tabs items={["Homebrew", "Windows", "curl", "npm", "Build from Source"]}>
+  <Tab value="Homebrew">
+    ```bash
+    brew install test-mesh/brew/testmesh
+    ```
+
+    Verify the installation:
+
+    ```bash
+    testmesh --version
+    ```
+  </Tab>
+  <Tab value="Windows">
+    Run this in PowerShell (no admin required):
+
+    ```powershell
+    irm https://testmesh.io/install.ps1 | iex
+    ```
+
+    Installs to `%LOCALAPPDATA%\Programs\testmesh` and adds it to your user `PATH`. To install to a custom location:
+
+    ```powershell
+    $env:TESTMESH_INSTALL_DIR = "C:\tools\testmesh"; irm https://testmesh.io/install.ps1 | iex
+    ```
+
+    To install a specific version:
+
+    ```powershell
+    irm https://testmesh.io/install.ps1 | iex -Args "--version=v0.1.10"
+    ```
+
+    Verify the installation (open a new terminal):
+
+    ```powershell
+    testmesh --version
+    ```
+  </Tab>
+  <Tab value="curl">
+    Downloads the latest release binary for your OS and architecture:
+
+    ```bash
+    curl -fsSL https://testmesh.io/install.sh | sh
+    ```
+
+    The script verifies checksums before installing. To install to a custom location:
+
+    ```bash
+    TESTMESH_INSTALL_DIR=~/.local/bin curl -fsSL https://testmesh.io/install.sh | sh
+    ```
+  </Tab>
+  <Tab value="npm">
+    ```bash
+    npm install -g @testmesh/cli
+    ```
+
+    This downloads the platform-specific binary via the npm postinstall hook. Works with `npx` too:
+
+    ```bash
+    npx @testmesh/cli run ./flow.yaml
+    ```
+  </Tab>
+  <Tab value="Build from Source">
+    Clone the repository and build the binary:
+
+    <Steps>
+      <Step>
+        Clone the repo:
+
+        ```bash
+        git clone https://github.com/test-mesh/testmesh.git
+        cd testmesh/cli
+        ```
+      </Step>
+      <Step>
+        Build the binary:
+
+        ```bash
+        go build -o testmesh main.go
+        ```
+      </Step>
+      <Step>
+        Run it:
+
+        ```bash
+        ./testmesh --help
+        ```
+
+        Or move it to a location on your `PATH` for global access:
+
+        ```bash
+        mv testmesh /usr/local/bin/testmesh
+        ```
+      </Step>
+    </Steps>
+
+    During development, you can skip the build step and use `go run` directly:
+
+    ```bash
+    go run main.go run ../examples/microservices/e2e-order-flow.yaml
+    ```
+  </Tab>
+</Tabs>
+
+## Claude Code Plugin
+
+If you use Claude Code, install the TestMesh plugin to get the MCP server and 10 built-in skills:
+
+```bash
+/plugin marketplace add test-mesh/testmesh
+/plugin install testmesh@testmesh
+```
+
+This gives you:
+- **MCP server** — Claude Code can analyze your services, generate flows, run tests, and check coverage without leaving the IDE
+- **Skills** — `setup`, `generate-flow`, `run-flow`, `validate-flow`, `action-patterns`, `debugging-flows`, `flow-layers`, `mcp-tools`, `yaml-schema`, `coverage`
+
+<Callout type="info">
+  The plugin requires the TestMesh CLI to be installed and on your `PATH`. Install it using one of the options above first.
+</Callout>
+
+<Callout type="warning">
+  If you see `Permission denied (publickey)` during install, run this first:
+  ```bash
+  git config --global url."https://github.com/".insteadOf "git@github.com:"
+  ```
+</Callout>
+
+For manual MCP configuration (VS Code, Cursor, or other MCP clients), see [MCP Integration](/docs/features/mcp-integration#using-with-claude-code).
+
+---
+
+## Environment Variables
+
+The CLI reads configuration from environment variables. Set these before running flows:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | For AI features | Used by `generate` and `chat` commands |
+| `OPENAI_API_KEY` | For AI features (alternative) | Alternative to Anthropic key |
+| `DATABASE_URL` | For database steps | PostgreSQL connection string |
+| `REDIS_URL` | For Redis steps | Redis connection string |
+
+<Callout type="info">
+  If you're only running HTTP-based flows, no environment variables are required. Database, Redis, and Kafka steps each require their respective connection details inside the flow YAML config.
+</Callout>
+
+You can set variables inline when running a flow:
+
+```bash
+BASE_URL=https://staging.example.com testmesh run ./flow.yaml
+```
+
+Or export them for the session:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+testmesh generate --description "Test the login endpoint"
+```
+
+## Verify the Installation
+
+Running `testmesh --help` should print the available commands:
+
+```
+Usage:
+  testmesh [command]
+
+Available Commands:
+  run         Execute a flow
+  validate    Validate flow YAML without executing
+  debug       Execute a flow step-by-step interactively
+  watch       Auto-run a flow on file changes
+  generate    AI-powered test flow generation
+  chat        Conversational test creation
+  mock        Start a local mock HTTP server
+  init        Initialize a new TestMesh project
+  login       Authenticate with a TestMesh server
+  report      View execution reports
+  import      Import flows from Postman or OpenAPI
+  export      Export flows to other formats
+  config      Manage CLI configuration
+  schedule    Manage scheduled flows
+  mcp         Start the MCP server for AI integration
+
+Use "testmesh [command] --help" for more information about a command.
+```
+
+<Callout type="tip">
+  Next, follow the [Your First Flow](/docs/getting-started/first-flow) guide to write and run a test.
+</Callout>
+
+## What's Next
+
+<Cards>
+  <Card title="Your First Flow" href="/docs/getting-started/first-flow" description="Write and run your first test." />
+  <Card title="CLI Reference" href="/docs/cli" description="All testmesh commands explained." />
+</Cards>

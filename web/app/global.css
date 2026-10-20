@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@theme {
+  --color-fd-primary: oklch(0.59 0.14 242);
+  --color-fd-primary-foreground: oklch(0.98 0.01 237);
+  --color-fd-accent: oklch(0.59 0.14 242);
+  --color-fd-accent-foreground: oklch(0.98 0.01 237);
+  --color-fd-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --color-fd-background: oklch(0.145 0 0);
+  --color-fd-foreground: oklch(0.985 0 0);
+  --color-fd-card: oklch(0.205 0 0);
+  --color-fd-card-foreground: oklch(0.985 0 0);
+  --color-fd-muted: oklch(0.269 0 0);
+  --color-fd-muted-foreground: oklch(0.708 0 0);
+  --color-fd-border: oklch(1 0 0 / 10%);
+  --color-fd-primary: oklch(0.68 0.15 237);
+  --color-fd-primary-foreground: oklch(0.29 0.06 243);
+  --color-fd-accent: oklch(0.68 0.15 237);
+  --color-fd-accent-foreground: oklch(0.29 0.06 243);
+  --color-fd-secondary: oklch(0.274 0.006 286.033);
+  --color-fd-secondary-foreground: oklch(0.985 0 0);
+  --color-fd-ring: oklch(0.556 0 0);
+  --color-fd-popover: oklch(0.205 0 0);
+  --color-fd-popover-foreground: oklch(0.985 0 0);
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: oklch(0.23 0 0);
+  --color-fd-secondary: oklch(0.25 0 0);
+  --color-fd-muted-foreground: oklch(0.72 0 0);
+}
+
+/* Prevent the layout's centering spacer columns from growing.
+   The grid has minmax(min-content, 1fr) spacers on both sides of the content
+   area. On screens wider than --fd-layout-width (default 97rem / 1552px) those
+   spacers expand, creating visible empty space to the left of the sidebar nav
+   items. Setting this to a large value collapses the spacers on all common
+   monitor widths, keeping the sidebar flush against the content area. */
+#nd-docs-layout {
+  --fd-layout-width: 1920px;
+}

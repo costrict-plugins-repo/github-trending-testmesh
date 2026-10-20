@@ -1,0 +1,4 @@
+{
+  "title": "Actions",
+  "pages": ["index", "http-request", "database-query", "kafka", "grpc", "websocket", "redis", "neo4j", "minio", "otel-loki-prometheus", "mock-server", "control-flow", "transform", "docker", "browser", "utility"]
+}

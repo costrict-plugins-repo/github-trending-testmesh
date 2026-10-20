@@ -1,0 +1,108 @@
+flow:
+  name: "Order Service — List Orders By User"
+  description: "GET /orders?user_id returns list with non-nil orders array and all entries match user_id"
+
+  env_file: ../../.env.test
+
+  setup:
+    - id: cleanup_order_items
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM order_service.order_items WHERE order_id IN (SELECT id FROM order_service.orders WHERE user_id IN (SELECT id::text FROM user_service.users WHERE email = 'plan-order@example.com'))"
+    - id: cleanup_orders
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM order_service.orders WHERE user_id IN (SELECT id::text FROM user_service.users WHERE email = 'plan-order@example.com')"
+    - id: cleanup_product
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM product_service.products WHERE name = 'Plan Order Product'"
+    - id: cleanup_user
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM user_service.users WHERE email = 'plan-order@example.com'"
+    - id: create_user
+      action: http_request
+      config:
+        method: POST
+        url: "${USER_SERVICE_URL}/api/v1/users"
+        headers:
+          Content-Type: application/json
+        body:
+          email: "plan-order@example.com"
+          name: "Plan Order User"
+      assert:
+        - "status == 201"
+      output:
+        user_id: "$.body.id"
+    - id: create_product
+      action: http_request
+      config:
+        method: POST
+        url: "${PRODUCT_SERVICE_URL}/api/v1/products"
+        headers:
+          Content-Type: application/json
+        body:
+          name: "Plan Order Product"
+          price: 25.00
+          inventory: 50
+      assert:
+        - "status == 201"
+      output:
+        product_id: "$.body.id"
+    - id: create_order
+      action: http_request
+      config:
+        method: POST
+        url: "${ORDER_SERVICE_URL}/api/v1/orders"
+        headers:
+          Content-Type: application/json
+        body:
+          user_id: "{{user_id}}"
+          items:
+            - product_id: "{{product_id}}"
+              quantity: 2
+      assert:
+        - "status == 201"
+      output:
+        order_id: "$.body.id"
+
+  steps:
+    - id: list_orders_by_user
+      action: http_request
+      config:
+        method: GET
+        url: "${ORDER_SERVICE_URL}/api/v1/orders?user_id={{user_id}}"
+        headers:
+          Content-Type: application/json
+      assert:
+        - "status == 200"
+        - "body.orders != nil"
+        - "len(body.orders) == 1"
+        - "body.orders[0].user_id == user_id"
+
+  teardown:
+    - id: cleanup_order_items
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM order_service.order_items WHERE order_id = '{{order_id}}'"
+    - id: cleanup_orders
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM order_service.orders WHERE id = '{{order_id}}'"
+    - id: cleanup_product
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM product_service.products WHERE name = 'Plan Order Product'"
+    - id: cleanup_user
+      action: database_query
+      config:
+        connection: "${DB_URL}"
+        query: "DELETE FROM user_service.users WHERE email = 'plan-order@example.com'"

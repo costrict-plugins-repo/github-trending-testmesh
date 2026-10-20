@@ -1,0 +1,263 @@
+---
+title: Debugging
+description: Step through test flows interactively with breakpoints, variable inspection, and step-over execution.
+---
+
+TestMesh includes an interactive debugger for diagnosing failures in complex flows. Set breakpoints at any step, inspect variables and outputs at each point in execution, and step through one action at a time — from the terminal or the dashboard.
+
+<Cards>
+  <Card title="Debug Sessions" href="#debug-sessions" description="Start a debug session on any flow" />
+  <Card title="Breakpoints" href="#breakpoints" description="Pause execution at specific steps" />
+  <Card title="Inspecting State" href="#inspecting-state" description="View variables and step outputs" />
+  <Card title="CLI Debugger" href="#cli-debugger" description="Interactive debugging from the terminal" />
+</Cards>
+
+## Debug Sessions
+
+A debug session runs a flow in paused mode. The session starts automatically paused at the first step and waits for you to step over, continue to a breakpoint, or inspect state before proceeding.
+
+### From the Dashboard
+
+Navigate to the **Debug** page (sidebar) to see all active debug sessions. Each session can be expanded to view:
+
+- Current step highlighted
+- All variables in scope
+- Output from the last completed step
+- Step execution history
+
+### Via the API
+
+```bash
+# Start a debug session (runs flow in background, starts paused at step 1)
+curl -X POST http://localhost:5016/api/v1/debug/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flow_yaml": "<yaml string>",
+    "initial_breakpoint": "verify_order"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "be06fea6-1d11-406c-b38a-1aec1c510900",
+  "execution_id": "fc77a936-3e72-4a6d-a491-1dcdfe4f3b35",
+  "state": "stepping"
+}
+```
+
+The `initial_breakpoint` field is optional. When provided, `c` (continue) in the CLI — or the Resume button in the dashboard — will pause at that step instead of running through everything.
+
+```bash
+# List active sessions
+curl http://localhost:5016/api/v1/debug/sessions
+```
+
+---
+
+## Breakpoints
+
+Set breakpoints by step ID to pause execution at a specific step:
+
+```bash
+# Add a breakpoint
+curl -X POST http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/breakpoints \
+  -H "Content-Type: application/json" \
+  -d '{ "step_id": "verify_order", "type": "step" }'
+
+# List breakpoints
+curl http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/breakpoints
+
+# Remove a breakpoint
+curl -X DELETE http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/breakpoints/$BREAKPOINT_ID
+```
+
+When execution reaches a breakpoint, the session transitions to `paused` state and waits for one of:
+
+| Action | Description |
+|--------|-------------|
+| **Continue** | Resume until the next breakpoint (or end) |
+| **Step Over** | Execute only the next step, then pause again |
+| **Stop** | Abort the execution entirely |
+
+---
+
+## Inspecting State
+
+When paused, you can inspect all captured state via the API or the CLI `v` / `vars` command.
+
+### Session State
+
+```bash
+curl http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/state
+```
+
+```json
+{
+  "state": "paused",
+  "current_step": "verify_order",
+  "variables": {
+    "USER_SERVICE_URL": "http://localhost:5001",
+    "user_id": "usr_abc123",
+    "order_id": "c1c1ef3e-8985-4cb7-9c20-bf8bc6b37e7a"
+  },
+  "step_outputs": { ... }
+}
+```
+
+### Variables
+
+All variables set via `output` mappings from previous steps are available in the variable inspector:
+
+```
+Variables:
+  USER_SERVICE_URL = "http://localhost:5001"
+  user_id          = "usr_abc123"
+  order_id         = "c1c1ef3e-8985-4cb7-9c20-bf8bc6b37e7a"
+  auth_token       = "Bearer eyJ..."
+```
+
+### Step Output
+
+The raw output data from the last executed step is available in `step_outputs` of the state response.
+
+### Execution History
+
+```bash
+curl http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/history
+```
+
+Returns a timeline of all steps completed so far with their status (passed/failed), duration, and any assertion failures.
+
+---
+
+## Session States
+
+| State | Meaning |
+|-------|---------|
+| `stepping` | Paused between steps, waiting for the next command |
+| `paused` | Paused at a breakpoint |
+| `running` | Actively executing a step |
+| `terminated` | Execution finished or stopped |
+
+---
+
+## Controlling Execution
+
+### Dashboard
+
+The debug panel shows **Step Over**, **Continue**, **Pause**, and **Stop** controls. Each action takes effect immediately and is reflected in the CLI within about one second.
+
+### API
+
+```bash
+# Execute next step (step over)
+curl -X POST http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/step-over
+
+# Continue to next breakpoint
+curl -X POST http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/resume
+
+# Pause a running session
+curl -X POST http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/pause
+
+# Terminate the session
+curl -X POST http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID/stop
+
+# End and delete the session
+curl -X DELETE http://localhost:5016/api/v1/debug/sessions/$EXECUTION_ID
+```
+
+---
+
+## CLI Debugger
+
+The CLI `debug` command connects to the TestMesh API and provides an interactive `(debug) ` prompt:
+
+```bash
+testmesh debug ./flows/order-flow.yaml
+testmesh debug ./flows/order-flow.yaml --break verify_order
+```
+
+Available commands at the prompt:
+
+| Command | Description |
+|---------|-------------|
+| `n` / `next` | Execute the current step, pause at the next |
+| `c` / `continue` | Run freely until the next breakpoint hits |
+| `v` / `vars` | Print all variables captured so far |
+| `p <var>` / `print <var>` | Print a specific variable |
+| `b <step-id>` / `break <step-id>` | Set a breakpoint on a step |
+| `l` / `list` | List all active breakpoints |
+| `h` / `help` | Show help |
+| `q` / `quit` | End the debug session |
+
+Example session:
+
+```
+🔍 Starting debug session...
+   Flow: ./flows/order-flow.yaml
+
+Session:     be06fea6-1d11-406c-b38a-1aec1c510900
+Execution:   fc77a936-3e72-4a6d-a491-1dcdfe4f3b35
+State:       stepping
+
+⏸  Paused at step: cleanup_notifications
+(debug) n
+
+⏸  Paused at step: create_user
+(debug) v
+Variables:
+  USER_SERVICE_URL = "http://localhost:5001"
+  ...
+(debug) b verify_order
+Breakpoint set at 'verify_order'
+(debug) c
+  continuing…
+
+⏸  Paused at step: verify_order
+(debug) p order_id
+  order_id = "c1c1ef3e-8985-4cb7-9c20-bf8bc6b37e7a"
+(debug) q
+Ending debug session…
+```
+
+The CLI and dashboard are bidirectional — actions in either are reflected in the other within about one second.
+
+---
+
+## Debugging Common Issues
+
+### Assertion Failures
+
+When an assertion fails, the debugger shows the evaluated expression and both the expected and actual values:
+
+```
+✗ FAILED assertion: status == 201
+  Expression: status == 201
+  status = 400
+  Response body: {"error": "email already exists"}
+```
+
+### Missing Variables
+
+If a template like `${create_user.id}` resolves to empty, the variable inspector shows exactly which outputs are available. Use `v` / `vars` in the CLI or the Variables panel in the dashboard:
+
+```
+Variables:
+  create_user.status  = 201
+  create_user.body.id = ""    ← empty — check the output mapping in the flow YAML
+```
+
+### Slow Steps
+
+Each step in the execution history shows its duration. A step taking much longer than expected likely indicates a network timeout or an unresponsive service.
+
+---
+
+## What's Next
+
+<Cards>
+  <Card title="Observability" href="/docs/features/observability" description="Stream logs and execution events in real time." />
+  <Card title="CLI run command" href="/docs/cli/run" description="Run flows from the terminal." />
+</Cards>

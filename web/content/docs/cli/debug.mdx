@@ -1,0 +1,94 @@
+---
+title: testmesh debug
+description: Execute a flow step-by-step with interactive inspection.
+---
+
+The `debug` command runs a flow against the TestMesh API in an interactive session. Execution starts automatically paused at the first step. You can step through one step at a time, set breakpoints, inspect variables, and resume freely — all from the terminal.
+
+## Usage
+
+```bash
+testmesh debug <flow.yaml>
+testmesh debug <flow.yaml> --break <step-id>
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--api-url` | `http://localhost:5016` | TestMesh API to connect to |
+| `--break <step-id>` | — | Set an initial breakpoint so `c` (continue) pauses there instead of running through everything |
+
+## Interactive Commands
+
+Once the session starts you land at a `(debug) ` prompt:
+
+| Command | Description |
+|---------|-------------|
+| `n` / `next` | Execute the current step, pause at the next |
+| `c` / `continue` | Run freely until the next breakpoint hits |
+| `v` / `vars` | Print all variables captured so far |
+| `p <var>` / `print <var>` | Print a specific variable |
+| `b <step-id>` / `break <step-id>` | Set a breakpoint on a step |
+| `l` / `list` | List all active breakpoints |
+| `h` / `help` | Show help |
+| `q` / `quit` | End the debug session |
+
+## Example Session
+
+```bash
+testmesh debug ./flows/order-flow.yaml
+```
+
+```
+🔍 Starting debug session...
+   Flow: ./flows/order-flow.yaml
+
+Session:     be06fea6-1d11-406c-b38a-1aec1c510900
+Execution:   fc77a936-3e72-4a6d-a491-1dcdfe4f3b35
+State:       stepping
+
+Commands:
+  n, next      Execute next step
+  c, continue  Continue to next breakpoint
+  v, vars      List all variables
+  ...
+
+⏸  Paused at step: cleanup_notifications
+(debug) n
+
+⏸  Paused at step: create_user
+(debug) v
+Variables:
+  USER_SERVICE_URL = "http://localhost:5001"
+  ...
+(debug) n
+
+⏸  Paused at step: create_product
+(debug) b verify_order
+Breakpoint set at 'verify_order'
+(debug) c
+  continuing…
+
+⏸  Paused at step: verify_order
+(debug) p order_id
+  order_id = "c1c1ef3e-8985-4cb7-9c20-bf8bc6b37e7a"
+(debug) q
+Ending debug session…
+```
+
+## Using `--break` for Targeted Debugging
+
+When you know exactly where the problem is, set an initial breakpoint with `--break` so that `c` (continue) lands there directly instead of stepping through every preceding step:
+
+```bash
+testmesh debug ./flows/order-flow.yaml --break verify_order
+```
+
+The session still starts paused at the first step. Pressing `c` will run all steps freely until `verify_order` is reached.
+
+## Dashboard Sync
+
+The debug session is bidirectional. The dashboard `/debug` page shows all active sessions in real time — variables, step history, and breakpoints. Actions taken in the dashboard (step over, continue, stop) are reflected in the CLI within about one second, and vice versa.
+
+<Callout type="tip">
+  Pair `debug` with `watch` during active development. Use `debug` to pin down a failing step, then switch to `watch` for rapid iteration as you refine assertions.
+</Callout>
